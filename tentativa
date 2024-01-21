@@ -1,0 +1,84 @@
+% Defina o diretório onde suas imagens estão localizadas
+diretorio = 'C:\Users\Lenovo\Pictures\See+ (Images)\Red';
+
+% Obtenha a lista de arquivos no diretório
+arquivos = dir(fullfile(diretorio, '*.png')); % Altere a extensão se necessário
+
+% Inicialize vetores para armazenar os resultados
+areas = zeros(length(arquivos), 1);
+perimetros = zeros(length(arquivos), 1);
+centroides = zeros(length(arquivos), 2);
+
+% Defina a relação de conversão de pixels para metros quadrados
+pixels_por_m2 = 274827.5;
+
+% Calcule quantos metros cada pixel representa
+metros_por_pixel = 1 / sqrt(pixels_por_m2);
+disp(['Cada pixel representa ', num2str(metros_por_pixel), ' metros']);
+
+% Loop através de todas as imagens
+for i = 1:length(arquivos)
+    % Leia a imagem
+    imagem = imread(fullfile(diretorio, arquivos(i).name));
+
+    % Converter a imagem para escala de cinza (se necessário)
+    imagemCinza = rgb2gray(imagem);
+
+    % Binarizar a imagem usando um limiar adequado
+    limiar = graythresh(imagemCinza);
+    imagemBinarizada = im2bw(imagemCinza, limiar);
+
+    % Medir a área
+
+    % Calcula a área da mancha (pixels pretos)
+    area_mancha = numel(imagemBinarizada) - bwarea(imagemBinarizada);
+    areas(i) = area_mancha;
+    areas_em_metros_quadrados(i) = areas(i) / pixels_por_m2;
+    disp(['Área da mancha ', num2str(i), ': ', num2str(areas_em_metros_quadrados(i)), ' metros quadrados']);
+
+    % Medir o perímetro usando regionprops, mas o perímetro caluculado é da regiao branca na imagem binarizada
+    % e a mancha é representadas por pixels pretos (valor 0)
+    % Por isso é necessário inverter os valores da imagen binarizada, para calcular o perimetro da região branca invertida 
+    inverted_imagemBinarizada = imcomplement(imagemBinarizada);
+
+    % Calcular o perímetro da região branca (representa a mancha) na imagem invertida
+    estatisticas = regionprops(inverted_imagemBinarizada, 'Perimeter');
+    perimetros(i) = estatisticas.Perimeter;
+    perimetros_em_metros(i) = perimetros(i) * metros_por_pixel;
+    disp(['Perímetro da mancha ', num2str(i), ': ', num2str(perimetros_em_metros(i)), ' metros']);
+
+    % Calcular o centroide também da imagem invertida
+    % Calcular o centroide da região preta
+    estatisticas = regionprops(inverted_imagemBinarizada, 'Centroid');
+    centroides(i, :) = estatisticas.Centroid;
+
+    % Converta as coordenadas do centroide de pixels para metros
+    centroides_em_metros(i, :) = centroides(i, :) * metros_por_pixel;
+
+    % Exibir as coordenadas do centroide em metros
+    disp(['Centroide da mancha ', num2str(i), ': (', num2str(centroides_em_metros(i, 1)), ', ', num2str(centroides_em_metros(i, 2)), ') metros']);
+end
+
+% Plotar os resultados ao longo do tempo
+tempo = 1:length(arquivos);
+
+figure;
+
+subplot(3, 1, 1);
+plot(tempo, areas_em_metros_quadrados, 'o-');
+title('Área das Manchas ao Longo do Tempo');
+xlabel('Tempo');
+ylabel('Área');
+
+subplot(3, 1, 2);
+plot(tempo, perimetros_em_metros, 'o-');
+title('Perímetro das Manchas ao Longo do Tempo');
+xlabel('Tempo');
+ylabel('Perímetro');
+
+subplot(3, 1, 3);
+plot(tempo, centroides_em_metros(:, 1), 'o-', tempo, centroides_em_metros(:, 2), 's-');
+legend('X', 'Y');
+title('Centroide das Manchas ao Longo do Tempo');
+xlabel('Tempo');
+ylabel('Coordenadas do Centroide');
