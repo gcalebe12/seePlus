@@ -1,84 +1,101 @@
-% Defina o diretório onde suas imagens estão localizadas
-diretorio = 'C:\Users\Lenovo\Pictures\See+ (Images)\Red';
+% Define the directory where your images are located
+directory = 'C:\Users\Lenovo\Pictures\See+ (Images)\Red';
 
-% Obtenha a lista de arquivos no diretório
-arquivos = dir(fullfile(diretorio, '*.png')); % Altere a extensão se necessário
+% Get the list of files in the directory
+files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
 
-% Inicialize vetores para armazenar os resultados
-areas = zeros(length(arquivos), 1);
-perimetros = zeros(length(arquivos), 1);
-centroides = zeros(length(arquivos), 2);
+% Initialize vectors to store the results
+areas = zeros(length(files), 1);
+perimeters = zeros(length(files), 1);
+centroids = zeros(length(files), 2);
 
-% Defina a relação de conversão de pixels para metros quadrados
-pixels_por_m2 = 274827.5;
+% Loop through all the images
+for i = 1:length(files)
+    % Read the image
+    image = imread(fullfile(directory, files(i).name));
 
-% Calcule quantos metros cada pixel representa
-metros_por_pixel = 1 / sqrt(pixels_por_m2);
-disp(['Cada pixel representa ', num2str(metros_por_pixel), ' metros']);
+    % Convert the image to grayscale
+    grayImage = rgb2gray(image);
 
-% Loop através de todas as imagens
-for i = 1:length(arquivos)
-    % Leia a imagem
-    imagem = imread(fullfile(diretorio, arquivos(i).name));
+    % Binarize the image using a suitable threshold
+    threshold = graythresh(grayImage);
+    binarizedImage = im2bw(grayImage, threshold);
 
-    % Converter a imagem para escala de cinza (se necessário)
-    imagemCinza = rgb2gray(imagem);
+    % Calculate the area of the stain (black pixels)
+    stainArea = numel(binarizedImage) - bwarea(binarizedImage);
+    areas(i) = stainArea;
+    disp(['Area of stain ', num2str(i), ': ', num2str(areas(i)), ' pixels']);
 
-    % Binarizar a imagem usando um limiar adequado
-    limiar = graythresh(imagemCinza);
-    imagemBinarizada = im2bw(imagemCinza, limiar);
+    % Measure the perimeter using regionprops, but the calculated perimeter is of the white region in the binarized image
+    % and the stain is represented by black pixels (value 0)
+    % Therefore, invert the values of the binarized image to calculate the perimeter of the inverted white region
+    invertedBinarizedImage = imcomplement(binarizedImage);
 
-    % Medir a área
+    % Calculate the perimeter of the white region (represents the stain) in the inverted image
+    stats = regionprops(invertedBinarizedImage, 'Perimeter');
+    perimeters(i) = stats.Perimeter;
+    disp(['Perimeter of stain ', num2str(i), ': ', num2str(perimeters(i)), ' pixels']);
 
-    % Calcula a área da mancha (pixels pretos)
-    area_mancha = numel(imagemBinarizada) - bwarea(imagemBinarizada);
-    areas(i) = area_mancha;
-    areas_em_metros_quadrados(i) = areas(i) / pixels_por_m2;
-    disp(['Área da mancha ', num2str(i), ': ', num2str(areas_em_metros_quadrados(i)), ' metros quadrados']);
+    % Calculate the centroid also of the inverted image
+    stats = regionprops(invertedBinarizedImage, 'Centroid');
+    centroids(i, :) = stats.Centroid;
 
-    % Medir o perímetro usando regionprops, mas o perímetro caluculado é da regiao branca na imagem binarizada
-    % e a mancha é representadas por pixels pretos (valor 0)
-    % Por isso é necessário inverter os valores da imagen binarizada, para calcular o perimetro da região branca invertida 
-    inverted_imagemBinarizada = imcomplement(imagemBinarizada);
-
-    % Calcular o perímetro da região branca (representa a mancha) na imagem invertida
-    estatisticas = regionprops(inverted_imagemBinarizada, 'Perimeter');
-    perimetros(i) = estatisticas.Perimeter;
-    perimetros_em_metros(i) = perimetros(i) * metros_por_pixel;
-    disp(['Perímetro da mancha ', num2str(i), ': ', num2str(perimetros_em_metros(i)), ' metros']);
-
-    % Calcular o centroide também da imagem invertida
-    % Calcular o centroide da região preta
-    estatisticas = regionprops(inverted_imagemBinarizada, 'Centroid');
-    centroides(i, :) = estatisticas.Centroid;
-
-    % Converta as coordenadas do centroide de pixels para metros
-    centroides_em_metros(i, :) = centroides(i, :) * metros_por_pixel;
-
-    % Exibir as coordenadas do centroide em metros
-    disp(['Centroide da mancha ', num2str(i), ': (', num2str(centroides_em_metros(i, 1)), ', ', num2str(centroides_em_metros(i, 2)), ') metros']);
+    % Display the centroid coordinates
+    disp(['Centroid of stain ', num2str(i), ': (', num2str(centroids(i, 1)), ', ', num2str(centroids(i, 2)), ') pixels']);
 end
 
-% Plotar os resultados ao longo do tempo
-tempo = 1:length(arquivos);
+% Plot the results over time
+time = 1:length(files);
 
 figure;
 
 subplot(3, 1, 1);
-plot(tempo, areas_em_metros_quadrados, 'o-');
-title('Área das Manchas ao Longo do Tempo');
-xlabel('Tempo');
-ylabel('Área');
+plot(time, areas, 'o-');
+title('Area of Stain Over Time');
+xlabel('Time');
+ylabel('Area');
 
 subplot(3, 1, 2);
-plot(tempo, perimetros_em_metros, 'o-');
-title('Perímetro das Manchas ao Longo do Tempo');
-xlabel('Tempo');
-ylabel('Perímetro');
+plot(time, perimeters, 'o-');
+title('Perimeter of Stain Over Time');
+xlabel('Time');
+ylabel('Perimeter');
 
 subplot(3, 1, 3);
-plot(tempo, centroides_em_metros(:, 1), 'o-', tempo, centroides_em_metros(:, 2), 's-');
+plot(time, centroids(:, 1), 'o-', time, centroids(:, 2), 's-');
 legend('X', 'Y');
-title('Centroide das Manchas ao Longo do Tempo');
-xlabel('Tempo');
-ylabel('Coordenadas do Centroide');
+title('Centroid of Stain Over Time');
+xlabel('Time');
+ylabel('Centroid Coordinates');
+
+% Degree of the polynomial for fitting (can be adjusted as needed)
+degree_polynomial = 2;
+
+% Curve fitting for the area
+coefficients_area = polyfit(time, areas, degree_polynomial);
+function_area = polyval(coefficients_area, time);
+
+% Curve fitting for the perimeter
+coefficients_perimeter = polyfit(time, perimeters, degree_polynomial);
+function_perimeter = polyval(coefficients_perimeter, time);
+
+% Curve fitting for centroid X
+coefficients_centroid_x = polyfit(time, centroids(:, 1), degree_polynomial);
+function_centroid_x = polyval(coefficients_centroid_x, time);
+
+% Curve fitting for centroid Y
+coefficients_centroid_y = polyfit(time, centroids(:, 2), degree_polynomial);
+function_centroid_y = polyval(coefficients_centroid_y, time);
+
+% Displaying the polynomial coefficients for each parameter
+disp('Polynomial coefficients for the area:');
+disp(coefficients_area);
+
+disp('Polynomial coefficients for the perimeter:');
+disp(coefficients_perimeter);
+
+disp('Polynomial coefficients for centroid X:');
+disp(coefficients_centroid_x);
+
+disp('Polynomial coefficients for centroid Y:');
+disp(coefficients_centroid_y);
