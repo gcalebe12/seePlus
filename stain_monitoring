@@ -21,15 +21,13 @@ for i = 1:length(files)
     threshold = graythresh(grayImage);
     binarizedImage = im2bw(grayImage, threshold);
 
-    % Calculate the area of the stain (black pixels)
-    stainArea = numel(binarizedImage) - bwarea(binarizedImage);
+    % Invert the values of the binarized image to calculate the parameters of the inverted white region
+    invertedBinarizedImage = imcomplement(binarizedImage);
+
+    % Calculate the area of the white region (represents the stain) in the inverted image
+    stainArea = bwarea(invertedBinarizedImage);
     areas(i) = stainArea;
     disp(['Area of stain ', num2str(i), ': ', num2str(areas(i)), ' pixels']);
-
-    % Measure the perimeter using regionprops, but the calculated perimeter is of the white region in the binarized image
-    % and the stain is represented by black pixels (value 0)
-    % Therefore, invert the values of the binarized image to calculate the perimeter of the inverted white region
-    invertedBinarizedImage = imcomplement(binarizedImage);
 
     % Calculate the perimeter of the white region (represents the stain) in the inverted image
     stats = regionprops(invertedBinarizedImage, 'Perimeter');
