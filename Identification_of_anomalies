@@ -1,0 +1,58 @@
+% Read the image
+image = imread('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\fachada\1.png'); % Replace with the correct path
+
+% Definition of desired colors
+desired_colors = {
+    [255, 242, 204], % Facade
+    [112, 173, 71]    % Stains
+};
+
+% Tolerance to consider a color
+tolerance = 20;
+
+% Initialization of the total mask
+total_mask = zeros(size(image, 1), size(image, 2));
+
+% Initialization of a vector to store the areas
+areas_per_class = zeros(length(desired_colors), 1);
+
+% Loop over the desired colors
+for i = 1:length(desired_colors)
+    % Current color
+    desired_color = desired_colors{i};
+    
+    % Replication of the color to create a matrix of the same size as the image
+    desired_color_replicated = repmat(reshape(desired_color, 1, 1, 3), size(image, 1), size(image, 2), 1);
+    
+    % Calculation of the mask for the desired color
+    color_mask = all(abs(double(image) - double(desired_color_replicated)) <= tolerance, 3);
+    
+    % Addition of the partial mask to the total mask
+    total_mask = total_mask + color_mask;
+    
+    % Calculation of the area in pixels
+    area_pixels = sum(color_mask(:));
+    
+    % Calculation of the area in percentage
+    area_percentage = (area_pixels / numel(color_mask)) * 100;
+    
+    % Storage of the area in the vector
+    areas_per_class(i) = area_percentage;
+    
+    % Display of the areas for each class
+    disp(['Area of Class ', num2str(i), ' - Percentage: ', num2str(area_percentage), '%, Pixels: ', num2str(area_pixels)]);
+end
+
+% Display the original image and the mask
+figure;
+subplot(1, 2, 1);
+imshow(image);
+title('Original Image');
+
+subplot(1, 2, 2);
+imshow(total_mask);
+title('Mask of Desired Colors');
+
+% Display the total areas for all classes
+disp('Total Areas:');
+disp(areas_per_class);
