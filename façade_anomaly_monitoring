@@ -1,0 +1,112 @@
+% Define the directory where your images are located
+directory = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\fachadas'; % Replace with the correct path
+
+% Get the list of files in the directory
+files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
+
+% Define the desired colors for each class
+desired_colors = {
+   [255, 242, 204], % Facade
+   [112, 173, 71] % Stains
+};
+
+% Tolerance to consider a color
+tolerance = 20;
+
+% Degree of the polynomial for fitting (can be adjusted as needed)
+degree_polynomial = 2;
+
+% Initialize vectors to store the results
+areas_per_class = zeros(length(desired_colors), length(files));
+perimeter_per_class = zeros(length(desired_colors), length(files));
+centroid_per_class = zeros(length(desired_colors), length(files), 2);
+
+for j = 1:length(files)
+    % Read the image
+    image = imread(fullfile(directory, files(j).name));
+
+    % Initialize the total mask
+    total_mask = zeros(size(image, 1), size(image, 2));
+
+    % Loop over the desired colors
+    for i = 1:length(desired_colors)
+        % Current color
+        desired_color = desired_colors{i};
+    
+        % Replicate the color to create a matrix of the same size as the image
+        desired_color_replicated = repmat(reshape(desired_color, 1, 1, 3), size(image, 1), size(image, 2), 1);
+    
+        % Calculate the mask for the desired color
+        color_mask = all(abs(double(image) - double(desired_color_replicated)) <= tolerance, 3);
+    
+        % Add the partial mask to the total mask
+        total_mask = total_mask + color_mask;
+    
+        % Calculate the area in pixels
+        area_pixels = sum(color_mask(:));
+    
+        % Calculate the perimeter of the white region (represents the stain) in the inverted image
+        stats_perimeter = regionprops(color_mask, 'Perimeter');
+        perimeter = stats_perimeter.Perimeter;
+    
+        % Calculate the centroid also from the inverted image
+        stats_centroid = regionprops(color_mask, 'Centroid');
+        centroid = stats_centroid.Centroid;
+    
+        % Display information for each class
+        disp(['Image ', num2str(j), ', Class ', num2str(i), ':']);
+        disp(['  Area: ', num2str(area_pixels), ' pixels']);
+        disp(['  Perimeter: ', num2str(perimeter), ' pixels']);
+        disp(['  Centroid: (', num2str(centroid(1)), ', ', num2str(centroid(2)), ') pixels']);
+    
+        % Store the results
+        areas_per_class(i, j) = area_pixels;
+        perimeter_per_class(i, j) = perimeter;
+        centroid_per_class(i, j, :) = centroid;
+    end
+
+    % Display the original image and the mask
+    figure;
+    subplot(1, 2, 1);
+    imshow(image);
+    title(['Original Image - ', files(j).name]);
+
+    subplot(1, 2, 2);
+    imshow(total_mask);
+    title('Mask of Desired Colors');
+
+    % Wait a bit for visualization
+    pause(0.1);
+end
+
+% Display the results over time
+time = 1:length(files);
+
+figure;
+subplot(4, 1, 1);
+plot(time, areas_per_class(1, :), 'o-', time, areas_per_class(2, :), 's-');
+legend('Facade', 'Stains');
+title('Area of Each Class Over Time');
+xlabel('Time');
+ylabel('Area (pixels)');
+
+subplot(4, 1, 2);
+plot(time, perimeter_per_class(1, :), 'o-', time, perimeter_per_class(2, :), 's-');
+legend('Facade', 'Stains');
+title('Perimeter of Each Class Over Time');
+xlabel('Time');
+ylabel('Perimeter');
+
+subplot(4, 1, 3);
+plot(time, centroid_per_class(1, :, 1), 'o-', time, centroid_per_class(2, :, 1), 's-');
+legend('Facade', 'Stains');
+title('Centroid X of Each Class Over Time');
+xlabel('Time');
+ylabel('Centroid X Coordinate');
+
+subplot(4, 1, 4);
+plot(time, centroid_per_class(1, :, 2), 'o-', time, centroid_per_class(2, :, 2), 's-');
+legend('Facade', 'Stains');
+title('Centroid Y of Each Class Over Time');
+xlabel('Time');
+ylabel('Centroid Y Coordinate');
