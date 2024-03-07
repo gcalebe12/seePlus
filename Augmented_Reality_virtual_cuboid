@@ -1,0 +1,159 @@
+% Specify the complete path to your video
+videoFilename = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Testes AR\Vídeo\WhatsApp Video 2024-02-16 at 13.29.52.mp4';
+
+% Load the video into which AR content is to be added and read the first frame
+reader = VideoReader(videoFilename);
+I = readFrame(reader);
+
+% Display the first frame
+figure
+imshow(I)
+
+% Load Camera Intrinsics
+data = load("calibrationSession.mat");
+intrinsics = calibrationSession.CameraParameters.Intrinsics; % Ajuste aqui para 'intrinsics'
+
+% Estimate AprilTag Pose
+tagSize = 45; % in mm
+
+% To make the AprilTag detection faster and reduce false detections, specify the AprilTag family
+tagFamily = "tag36h11";
+
+[~, ~, tagPose] = readAprilTag(I, tagFamily, intrinsics, tagSize);
+
+% Use helperInsertXYZAxes to visualize the X, Y, and Z world axes on the AprilTag
+annotatedImage = helperInsertXYZAxes(I, tagPose, intrinsics, tagSize);
+figure
+imshow(annotatedImage)
+
+% Apply a rotation to the estimated tag pose that rotates the y-axis by 180 degrees to flip the z-axis.
+rotationAngles = [0 180 0];
+tform = rigidtform3d(rotationAngles, [0 0 0]);
+updatedR = tagPose.R * tform.R;
+tagPose = rigidtform3d(updatedR, tagPose.Translation);
+
+% Display the updated world coordinate axes.
+annotatedImage = helperInsertXYZAxes(I, tagPose, intrinsics, tagSize);
+figure
+imshow(annotatedImage)
+
+% Define a 3-D cuboid to project onto the top of the AprilTag.
+[cubeWidth, cubeHeight, cubeDepth] = deal(tagSize);
+
+vertices = [ cubeWidth/2 -cubeHeight/2; 
+             cubeWidth/2  cubeHeight/2;
+            -cubeWidth/2  cubeHeight/2;
+            -cubeWidth/2 -cubeHeight/2 ];
+
+cuboidVertices = [vertices zeros(4,1);
+                  vertices (cubeDepth)*ones(4,1)];
+
+% Use world2img to project the virtual cuboid vertices into the image coordinate system.
+projectedVertices = world2img(cuboidVertices, tagPose, intrinsics);
+
+% Use insertShape to augment the image with the virtual content.
+figure
+augmentedImage = insertShape(I, "projected-cuboid", projectedVertices, ...
+    ShapeColor="green", LineWidth=6);
+imshow(augmentedImage)
+
+% Add the cuboid to the virtual scene with helperShowVirtualCuboid
+figure
+ax = helperShowVirtualCuboid(cuboidVertices);
+% Use pose2extr to convert the tag pose to the camera extrinsics, which represent the camera orientation and location in world coordinates
+camExtrinsics = pose2extr(tagPose);
+% Use plotCamera to visualize the camera in 3-D.
+hold on
+cam = plotCamera(AbsolutePose=camExtrinsics, Size=15, Parent=ax);
+
+% Add Virtual Content to Video and Visualize Camera Trajectory
+% Create a video player to display video content.
+player = vision.VideoPlayer();
+
+% Create an animated line to display camera trajectory.
+camTrajectory = animatedline(ax, ...
+    camExtrinsics.Translation(1),...
+    camExtrinsics.Translation(2),...
+    camExtrinsics.Translation(3),...
+    Color="blue", ...
+    LineWidth=2);
+
+% Loop over remaining video frames.
+while hasFrame(reader)
+
+    % Read next video frame.
+    I = readFrame(reader);
+
+    % Estimate AprilTag pose.
+    [~, ~, tagPose] = readAprilTag(I, tagFamily, intrinsics, tagSize);
+
+    % Update the tag pose to have z-axis pointing out of the tag.
+    tagPose = rigidtform3d(tagPose.A*tform.A);
+
+    % Project cuboid vertices from the world to image.
+    projectedVertices = world2img(cuboidVertices, tagPose, intrinsics);
+    
+    % Insert cuboid into video frame. 
+    augmentedImage = insertShape(I, "projected-cuboid", projectedVertices, ...
+        ShapeColor="green", LineWidth=6);
+
+    % Display the augmented video frame.
+    player(augmentedImage)  
+
+    % Update the camera position in the virtual scene.
+    camExtrinsics = pose2extr(tagPose);
+    cam.AbsolutePose = camExtrinsics;
+
+    % Update camera trajectory in the virtual scene.
+    addpoints(camTrajectory, ...
+        camExtrinsics.Translation(1),...
+        camExtrinsics.Translation(2),...
+        camExtrinsics.Translation(3));
+
+    % Flush the graphics pipeline.
+    drawnow limitrate
+end
+
+
+% Supporting Functions
+% helperInsertXYZAxes - Insert XYZ axes into an image
+function J = helperInsertXYZAxes(I, pose, intrinsics, axisLength)
+
+    xyzWorld = [0 0 0; axisLength 0 0; 0 axisLength 0; 0 0 axisLength];
+    xyzImage = worldToImage(intrinsics, pose, xyzWorld);
+
+    J = insertShape(I,...
+        "Line", [
+        xyzImage(1,:) xyzImage(2,:)
+        xyzImage(1,:) xyzImage(3,:)
+        xyzImage(1,:) xyzImage(4,:)
+        ], ...
+        ShapeColor=["red";"green";"blue"],...
+        LineWidth=7);
+end
+
+% helperShowVirtualCuboid - Display a cuboid in a 3-D plot
+function ax = helperShowVirtualCuboid(cuboidVertices)
+
+% Create an axes with predefined limits.
+ax = axes(XLim=[-300 300], YLim=[-300 300], ZLim=[0 300],...
+    XLimMode="manual", YLimMode="manual", ZLimMode="manual");
+grid on
+
+% Create a cuboid using patch. Define faces corresponding to
+% sets of cuboid vertices.
+faces = [1 2 3 4;
+         5 6 7 8;
+         2 6 7 3;
+         1 4 8 5;
+         1 2 6 5;
+         3 4 8 7];
+
+patch(Faces=faces, Vertices=cuboidVertices, FaceColor="green", FaceAlpha=0.3);
+
+% Add axis labels.
+xlabel("X (mm)")
+ylabel("Y (mm)")
+zlabel("Z (mm)")
+view(3)
+end
