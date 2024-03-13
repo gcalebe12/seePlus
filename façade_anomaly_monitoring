@@ -1,5 +1,5 @@
 % Define the directory where your images are located
-directory = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\fachadas'; % Replace with the correct path
+directory = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Fachada com anomalias'; % Replace with the correct path
 
 % Get the list of files in the directory
 files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
@@ -7,19 +7,22 @@ files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
 % Define the desired colors for each class
 desired_colors = {
    [255, 242, 204], % Facade
-   [112, 173, 71] % Stains
+   [112, 173, 71], % Green Stain
+   [255, 0, 0], % Red Stain
+   [0, 176, 240], % Cracks
 };
 
 % Tolerance to consider a color
 tolerance = 20;
 
-% Degree of the polynomial for fitting (can be adjusted as needed)
-degree_polynomial = 2;
-
 % Initialize vectors to store the results
 areas_per_class = zeros(length(desired_colors), length(files));
 perimeter_per_class = zeros(length(desired_colors), length(files));
 centroid_per_class = zeros(length(desired_colors), length(files), 2);
+
+% Initialize variables to store area and perimeter of class 1 in the first image
+area_class1_first_img = 0;
+perimeter_class1_first_img = 0;
 
 for j = 1:length(files)
     % Read the image
@@ -53,6 +56,12 @@ for j = 1:length(files)
         stats_centroid = regionprops(color_mask, 'Centroid');
         centroid = stats_centroid.Centroid;
     
+        % If it's the first image and the current class is class 1, store area and perimeter
+        if j == 1 && i == 1
+            area_class1_first_img = area_pixels;
+            perimeter_class1_first_img = perimeter;
+        end
+        
         % Display information for each class
         disp(['Image ', num2str(j), ', Class ', num2str(i), ':']);
         disp(['  Area: ', num2str(area_pixels), ' pixels']);
@@ -79,34 +88,45 @@ for j = 1:length(files)
     pause(0.1);
 end
 
+% Calcula os valores em porcentagem em relação à classe 1 na primeira imagem
+areas_por_classe_percentual = (areas_per_class ./ area_class1_first_img) * 100;
+perimetros_por_classe_percentual = (perimeter_per_class ./ perimeter_class1_first_img) * 100;
+
+% Exibe os resultados em porcentagem
+disp('Área (em %) em relação à classe 1 na primeira imagem:');
+disp(areas_por_classe_percentual);
+disp('Perímetro (em %) em relação à classe 1 na primeira imagem:');
+disp(perimetros_por_classe_percentual);
+
 % Display the results over time
 time = 1:length(files);
 
 figure;
 subplot(4, 1, 1);
-plot(time, areas_per_class(1, :), 'o-', time, areas_per_class(2, :), 's-');
-legend('Facade', 'Stains');
+plot(time, areas_per_class(1, :), 'o-', time, areas_per_class(2, :), 's-', time, areas_per_class(3, :), '^-', time, areas_per_class(4, :), 'd-');
+legend('Facade', 'Green Stains', 'Red Stains', 'Fratura');
 title('Area of Each Class Over Time');
 xlabel('Time');
 ylabel('Area (pixels)');
 
 subplot(4, 1, 2);
-plot(time, perimeter_per_class(1, :), 'o-', time, perimeter_per_class(2, :), 's-');
-legend('Facade', 'Stains');
+plot(time, perimeter_per_class(1, :), 'o-', time, perimeter_per_class(2, :), 's-', time, perimeter_per_class(3, :), '^-', time, perimeter_per_class(4, :), 'd-');
+legend('Facade', 'Green Stains', 'Red Stains', 'Fratura');
 title('Perimeter of Each Class Over Time');
 xlabel('Time');
 ylabel('Perimeter');
 
 subplot(4, 1, 3);
-plot(time, centroid_per_class(1, :, 1), 'o-', time, centroid_per_class(2, :, 1), 's-');
-legend('Facade', 'Stains');
+plot(time, centroid_per_class(1, :, 1), 'o-', time, centroid_per_class(2, :, 1), 's-', time, centroid_per_class(3, :, 1), '^-', time, centroid_per_class(4, :, 1), 'd-');
+legend('Facade', 'Green Stains', 'Red Stains', 'Fratura');
 title('Centroid X of Each Class Over Time');
 xlabel('Time');
 ylabel('Centroid X Coordinate');
 
 subplot(4, 1, 4);
-plot(time, centroid_per_class(1, :, 2), 'o-', time, centroid_per_class(2, :, 2), 's-');
-legend('Facade', 'Stains');
+plot(time, centroid_per_class(1, :, 2), 'o-', time, centroid_per_class(2, :, 2), 's-', time, centroid_per_class(3, :, 2), '^-', time, centroid_per_class(4, :, 2), 'd-');
+legend('Facade', 'Green Stains', 'Red Stains', 'Fratura');
 title('Centroid Y of Each Class Over Time');
 xlabel('Time');
 ylabel('Centroid Y Coordinate');
+
