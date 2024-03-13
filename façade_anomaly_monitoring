@@ -9,7 +9,7 @@ desired_colors = {
    [255, 242, 204], % Facade
    [112, 173, 71], % Green Stain
    [255, 0, 0], % Red Stain
-   [0, 176, 240], % Fratura
+   [0, 176, 240], % Cracks
 };
 
 % Tolerance to consider a color
@@ -134,3 +134,5 @@ legend('Facade', 'Green Stains', 'Red Stains', 'Fratura');
 title('Centroid Y of Each Class Over Time');
 xlabel('Time');
 ylabel('Centroid Y Coordinate');
+
+
