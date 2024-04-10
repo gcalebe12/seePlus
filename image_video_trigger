@@ -1,0 +1,61 @@
+% Especificar o caminho completo para o vídeo
+videoFilename = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Testes AR\Vídeo\WhatsApp Video 2024-03-28 at 12.38.00.mp4';
+
+% Carregar o vídeo
+reader = VideoReader(videoFilename);
+
+% Carregar a intrínseca da câmera (Você precisa ajustar isso de acordo com sua calibração de câmera)
+data = load("calibrationSession.mat");
+intrinsics = calibrationSession.CameraParameters.Intrinsics; % Ajuste aqui para 'intrinsics'
+
+% Estimar o tamanho da AprilTag em milímetros
+tagSize = 45; % Tamanho da AprilTag em milímetros
+
+% Carregar a imagem para sobrepor
+imagemParaSobrepor = imread('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Desenhos para AR\2.png');
+
+% Obter as dimensões do vídeo
+videoWidth = reader.Width;
+videoHeight = reader.Height;
+
+% Obter as dimensões da imagem para sobrepor
+[imageHeight, imageWidth, ~] = size(imagemParaSobrepor);
+
+% Redimensionar a imagem para que ela se ajuste à largura do vídeo sem distorções
+newImageWidth = videoWidth / 2; % Definir a largura da imagem para 1/8 da largura do vídeo
+scalingFactor = newImageWidth / imageWidth;
+newImageHeight = round(imageHeight * scalingFactor); % Redimensionar a altura mantendo a proporção
+
+% Redimensionar a imagem para ajustá-la à largura desejada
+imagemParaSobreporResized = imresize(imagemParaSobrepor, [newImageHeight, newImageWidth]);
+
+% Criar um objeto VideoWriter para escrever o novo vídeo
+outputVideo = VideoWriter('output_video.mp4', 'MPEG-4');
+outputVideo.FrameRate = reader.FrameRate; % Definir a taxa de quadros do novo vídeo
+open(outputVideo);
+
+% Loop sobre todos os frames do vídeo
+while hasFrame(reader)
+    % Ler o próximo frame
+    I = readFrame(reader);
+    
+    % Estimar a pose da AprilTag
+    tagFamily = "tag36h11"; % Família da AprilTag
+    [tagFound, ~, ~] = readAprilTag(I, tagFamily, intrinsics, tagSize);
+    
+    % Se uma AprilTag for encontrada, sobrepor a imagem
+    if tagFound
+        % Posicionar a imagem no centro da tela
+        x = round(videoWidth / 2 - newImageWidth / 2); % Posição horizontal central
+        y = round(videoHeight / 2 - newImageHeight / 2); % Posição vertical central
+        
+        % Sobrepor a imagem no vídeo
+        I(y:y+newImageHeight-1, x:x+newImageWidth-1, :) = imagemParaSobreporResized;
+    end
+    
+    % Escrever o frame atual no novo vídeo
+    writeVideo(outputVideo, I);
+end
+
+% Fechar o objeto VideoWriter
+close(outputVideo);
