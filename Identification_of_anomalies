@@ -56,3 +56,4 @@ title('Mask of Desired Colors');
 % Display the total areas for all classes
 disp('Total Areas:');
 disp(areas_per_class);
+
