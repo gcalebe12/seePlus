@@ -262,9 +262,9 @@ for i = 2:length(desired_colors)
         hold on;
     end
     hold off;
-    title(['Área para a Classe ', num2str(i)]);
-    xlabel('Número da Imagem');
-    ylabel('Área (%)');
+    title(['Area for Class ', num2str(i)]);
+    xlabel('Image number');
+    ylabel('Area (%)');
     legend('Location', 'best');
     
     % Plot graphs for perímetros do current class
@@ -274,9 +274,9 @@ for i = 2:length(desired_colors)
         hold on;
     end
     hold off;
-    title(['Perímetro para a Classe ', num2str(i)]);
-    xlabel('Número da Imagem');
-    ylabel('Perímetro');
+    title(['Perimeter for Class ', num2str(i)]);
+    xlabel('Image number');
+    ylabel('Perimeter');
     legend('Location', 'best');
 end
 
