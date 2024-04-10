@@ -4,7 +4,7 @@ videoFilename = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Testes AR\Vídeo\Wh
 % Carregar o vídeo
 reader = VideoReader(videoFilename);
 
-% Carregar a intrínseca da câmera (Você precisa ajustar isso de acordo com sua calibração de câmera)
+% Carregar a intrínseca da câmera 
 data = load("calibrationSession.mat");
 intrinsics = calibrationSession.CameraParameters.Intrinsics; % Ajuste aqui para 'intrinsics'
 
