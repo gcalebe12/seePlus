@@ -1,5 +1,5 @@
 % Define the directory where your images are located
-directory = 'C:\Users\Lenovo\Pictures\See+ (Images)\Red';
+directory = 'C:\Users\Lenovo\Pictures\See+ (Images)\Black';
 
 % Get the list of files in the directory
 files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
@@ -23,6 +23,7 @@ for i = 1:length(files)
 
     % Invert the values of the binarized image to calculate the parameters of the inverted white region
     invertedBinarizedImage = imcomplement(binarizedImage);
+    
 
     % Calculate the area of the white region (represents the stain) in the inverted image
     stainArea = bwarea(invertedBinarizedImage);
