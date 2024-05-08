@@ -1,0 +1,41 @@
+% Define the directory where your images are located
+directory = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Apenas fachadas\Extrair mascaras'; % Replace with the correct path
+
+% Get the list of files in the directory
+files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
+
+% Define the desired colors for each class
+desired_colors = {
+   [255, 242, 204], % Cladding
+   [112, 173, 71], % Green Stain
+   [255, 0,0], % Red Stain
+   [0, 176, 240] % Cracks
+};
+
+% Tolerance to consider a color
+color_tolerance = 45;
+
+% Loop over each image
+for j = 1:length(files)
+    % Read the image
+    image = imread(fullfile(directory, files(j).name));
+    
+    % Loop over each class
+    for class_index = 1:length(desired_colors)
+        % Initialize an empty mask for the current class
+        class_mask = zeros(size(image, 1), size(image, 2));
+
+        % Current color
+        desired_color = desired_colors{class_index};
+
+        % Replicate the color to create a matrix of the same size as the image
+        desired_color_replicated = repmat(reshape(desired_color, 1, 1, 3), size(image, 1), size(image, 2), 1);
+
+        % Calculate the mask for the desired color using color_tolerance
+        color_mask = all(abs(double(image) - double(desired_color_replicated)) <= color_tolerance, 3);
+
+        % Save the binary mask as an image with a name indicating the class and image
+        [~, name, ext] = fileparts(files(j).name);
+        imwrite(color_mask, fullfile(directory, ['mask_class' num2str(class_index) '_' name ext]));
+    end
+end
