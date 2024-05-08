@@ -1,0 +1,132 @@
+% Specify the full path to the video
+videoFilename = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Testes AR\Vídeo\WhatsApp Video 2024-04-26 at 08.21.43.mp4';
+
+% Load the video
+reader = VideoReader(videoFilename);
+
+% Load camera intrinsic parameters (You need to adjust this according to your camera calibration)
+data = load("calibrationSession.mat");
+intrinsics = data.calibrationSession.CameraParameters.Intrinsics; % Adjust here to 'intrinsics'
+
+% Estimate the size of the QR code in millimeters
+tagSize = 45; % QR code size in millimeters
+
+% Variables to store selected points and the image with the QR code
+selectedPoints = [];
+image_with_qrcode = [];
+
+% Loop over all frames of the video
+while hasFrame(reader)
+    % Read the next frame
+    I = readFrame(reader);
+    
+    % Estimate the position of the QR code
+    tagFamily = "tag36h11"; % QR code family
+    [tagFound, ~, tagPose] = readAprilTag(I, tagFamily, intrinsics, tagSize);
+    
+    % If a QR code is found, save the frame and allow point selection
+    if tagFound
+        % Save the frame as an image
+        imwrite(I, 'frame_with_qrcode.jpg');
+        
+        % Store the image with the QR code
+        image_with_qrcode = I;
+        
+        % Display the image with the QR code and allow user to select points
+        figure;
+        imshow(I);
+        title('Select 4 points on the image');
+        
+        % Allow the user to select 4 points on the image
+        [x, y] = ginput(4);
+        
+        % Store the selected points
+        selectedPoints = [selectedPoints; [x, y]];
+        
+        % Display the selected points on the image
+        hold on;
+        plot(x, y, 'ro', 'MarkerSize', 10, 'LineWidth', 2);
+        
+        % Display the coordinates of the points
+        for i = 1:numel(x)
+            text(x(i), y(i), ['(', num2str(x(i)), ', ', num2str(y(i)), ')'], 'Color', 'red', 'FontSize', 12);
+        end
+        hold off;
+        
+        % Close the window after point selection
+        close;
+        
+        % Stop the loop after finding the QR code and selecting the points
+        break;
+    end
+end
+
+% Check if enough selected points to initialize the trackers
+numPoints = 4;
+if size(selectedPoints, 1) >= numPoints
+    % Initialize tracker for each selected point
+    tracker = cell(numPoints, 1);
+    for i = 1:numPoints
+        tracker{i} = vision.PointTracker;
+        initialize(tracker{i}, selectedPoints(i,:), image_with_qrcode);
+    end
+else
+    error('Not enough selected points to initialize the trackers.');
+end
+
+% Open output video for writing
+outputVideo = VideoWriter('tracking_with_overlay.avi');
+open(outputVideo);
+
+% Restart video reading by setting CurrentTime to the beginning
+reader.CurrentTime = 0;
+
+% Loop over all frames of the video again for tracking
+while hasFrame(reader)
+    % Read the next frame
+    I = readFrame(reader);
+    
+    % Track points in each frame
+    trackedPoints = zeros(numPoints, 2);
+    for i = 1:numPoints
+        [trackedPoints(i,:), ~] = step(tracker{i}, I);
+    end
+    
+    % Calculate the bounding rectangle of the tracked points
+    rectangle = [min(trackedPoints(:,1)), min(trackedPoints(:,2)), max(trackedPoints(:,1))-min(trackedPoints(:,1)), max(trackedPoints(:,2))-min(trackedPoints(:,2))];
+    
+    % Determine dimensions of overlay image (use your specific image here)
+    overlayImage = imread('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Desenhos para AR\2.png');
+    [height_overlay, width_overlay, ~] = size(overlayImage);
+    
+    % Calculate resizing proportions to fit overlay image within bounds
+    scale_factor_width = rectangle(3) / width_overlay;
+    scale_factor_height = rectangle(4) / height_overlay;
+    
+    % Select the smallest scale factor to ensure overlay image has maximum of the larger size possible within the rectangle bounded by selected points
+    scale_factor = min(scale_factor_width, scale_factor_height);
+    
+    % Resize the overlay image
+    resized_overlay_image = imresize(overlayImage, scale_factor);
+    
+    % Recalculate dimensions of resized image
+    [height_overlay, width_overlay, ~] = size(resized_overlay_image);
+    
+    % Overlay the transformed image on the image with QR code
+    resulting_image = I;
+    resulting_image(ceil(rectangle(2)):ceil(rectangle(2)+height_overlay-1), ceil(rectangle(1)):ceil(rectangle(1)+width_overlay-1), :) = resized_overlay_image;
+    
+    % Draw lines between the tracked points
+    resulting_image_with_lines = insertShape(resulting_image, 'Line', [trackedPoints(1,:), trackedPoints(2,:)], 'Color', 'red', 'LineWidth', 2);
+    resulting_image_with_lines = insertShape(resulting_image_with_lines, 'Line', [trackedPoints(2,:), trackedPoints(3,:)], 'Color', 'red', 'LineWidth', 2);
+    resulting_image_with_lines = insertShape(resulting_image_with_lines, 'Line', [trackedPoints(3,:), trackedPoints(4,:)], 'Color', 'red', 'LineWidth', 2);
+    resulting_image_with_lines = insertShape(resulting_image_with_lines, 'Line', [trackedPoints(4,:), trackedPoints(1,:)], 'Color', 'red', 'LineWidth', 2);
+    
+    % Add frame to the output video
+    writeVideo(outputVideo, resulting_image_with_lines);
+end
+
+% Close the output video
+close(outputVideo);
+
+disp('Tracking and overlaying completed, and output video successfully generated.');
