@@ -1,0 +1,113 @@
+% Load the video
+video_file = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Teste final\WhatsApp Video 2024-05-08 at 12.00.36.mp4'; % Replace with the correct path
+video_reader = VideoReader(video_file);
+
+% Read the first frame to display
+frame = readFrame(video_reader);
+video_height = size(frame, 1);
+video_width = size(frame, 2);
+num_channels = size(frame, 3);
+
+% Variable to indicate if the first QR code was found
+qr_code_found = false;
+
+% Initialize the KLT tracker
+tracker = vision.PointTracker('MaxBidirectionalError', 1);
+
+% Interface to select the colorization colors for each mask
+mask_color1 = [255,0,0];
+mask_color2 = [0,255,0];
+mask_color3 = [0,0,255];
+
+% Set the paths of the mask files for each of the three masks
+mask_file1 = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Apenas fachadas\FASE\vermelho_3.png'; % Replace with the correct path
+mask_file2 = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Apenas fachadas\FASE\verde_3.png'; % Replace with the correct path
+mask_file3 = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Apenas fachadas\FASE\Fenda_3.png'; % Replace with the correct path
+
+% Read each binary mask
+mask_binary1 = imread(mask_file1);
+mask_binary2 = imread(mask_file2);
+mask_binary3 = imread(mask_file3);
+
+% Apply colorization to all frames
+output_video_file = 'video_colorized_final.mp4'; % Output video file name
+video_writer = VideoWriter(output_video_file, 'MPEG-4'); % Create a video writing object
+open(video_writer); % Open the video writing object
+
+while hasFrame(video_reader)
+    % Read the next frame
+    frame = readFrame(video_reader);
+
+    % Estimate the position of the QR code if the first one has not been found
+    if ~qr_code_found
+        tagFamily = "tag36h11"; % QR code family
+        [tagFound, ~, ~] = readAprilTag(frame, tagFamily);
+
+        % If a QR code is found for the first time
+        if tagFound
+            qr_code_found = true;
+
+            % Display the image with the QR code and allow the user to select the mask area
+            imshow(frame);
+            title('Select the mask area');
+            roi = round(getPosition(imrect)); % Returns the position of the rectangle selected by the user
+
+            % Convert the area of interest to points of interest
+            roi_points = [roi(1), roi(2);                 % top left
+                          roi(1)+roi(3), roi(2);          % top right
+                          roi(1)+roi(3), roi(2)+roi(4);   % bottom right
+                          roi(1), roi(2)+roi(4)];        % bottom left
+
+            % Resize each mask to match the selected area of interest
+            resized_mask1 = imresize(mask_binary1, [roi(4) roi(3)]);
+            resized_mask2 = imresize(mask_binary2, [roi(4) roi(3)]);
+            resized_mask3 = imresize(mask_binary3, [roi(4) roi(3)]);
+
+            % Initialize the KLT tracker with the points of interest from the selected area of interest
+            initialize(tracker, roi_points, frame);
+        end
+    end
+
+    % If the QR code was found or the area was selected
+    if qr_code_found
+        % Track the position of the points of interest
+        [tracked_points, valid] = step(tracker, frame);
+
+        % Update the position of the area of interest based on the tracked points
+        roi(1) = min(tracked_points(:, 1)); % minimum x coordinate
+        roi(2) = min(tracked_points(:, 2)); % minimum y coordinate
+        roi(3) = max(tracked_points(:, 1)) - roi(1); % width
+        roi(4) = max(tracked_points(:, 2)) - roi(2); % height
+
+        % Resize the selected area of interest to match the dimensions of the resized masks
+        roi_width = size(resized_mask1, 2);
+        roi_height = size(resized_mask1, 1);
+        roi = [roi(1), roi(2), roi_width, roi_height];
+
+        % Adjust the position of the masks within the frame
+        final_mask_frame1 = zeros(video_height, video_width);
+        final_mask_frame2 = zeros(video_height, video_width);
+        final_mask_frame3 = zeros(video_height, video_width);
+        final_mask_frame1(roi(2):roi(2)+roi(4)-1, roi(1):roi(1)+roi(3)-1) = resized_mask1;
+        final_mask_frame2(roi(2):roi(2)+roi(4)-1, roi(1):roi(1)+roi(3)-1) = resized_mask2;
+        final_mask_frame3(roi(2):roi(2)+roi(4)-1, roi(1):roi(1)+roi(3)-1) = resized_mask3;
+
+        % Apply the corresponding colors to the masks
+        final_frame = frame;
+        final_frame(:,:,1) = final_frame(:,:,1) + uint8(final_mask_frame1) * mask_color1(1); % Red component
+        final_frame(:,:,2) = final_frame(:,:,2) + uint8(final_mask_frame2) * mask_color2(2); % Green component
+        final_frame(:,:,3) = final_frame(:,:,3) + uint8(final_mask_frame3) * mask_color3(3); % Blue component
+    else
+        % If the QR code has not been found yet, keep the original frame
+        final_frame = frame;
+    end
+
+    % Write the colorized (or original) frame to the output video file
+    writeVideo(video_writer, final_frame);
+end
+
+% Close the video writing object
+close(video_writer);
+
+% Display a message indicating that the process is complete
+disp('Colorization completed. The colorized video has been saved as "video_colorized_final.mp4".');
