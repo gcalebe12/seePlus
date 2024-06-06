@@ -1,143 +1,120 @@
-% Define the directory where your images are located
-directory = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Fachada sem e com anomalias'; % Replace with the correct path
+% User Input
+option = input('Enter the specific year or "Total" to see the total evolution: ', 's');
 
-% Get the list of files in the directory
-files = dir(fullfile(directory, '*.png')); % Change the extension if necessary
+% Directory Configuration
+base_path = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\';
+if strcmp(option, 'Total')
+    sub_path = 'Total\';
+else
+    sub_path = [option, '\'];
+end
+directory = [base_path, sub_path, 'Image analysis'];
+image_directory = [base_path, sub_path, 'Images'];
+results_directory = [base_path, sub_path, 'Written results'];
+graph_directory = [base_path, 'Total\Graphs'];
 
-% Define the desired colors for each class
+% Create Directories
+dirs = {image_directory, results_directory};
+if strcmp(option, 'Total')
+    dirs{end+1} = graph_directory;
+end
+for d = dirs
+    if ~exist(d{1}, 'dir')
+        mkdir(d{1});
+    end
+end
+
+% Read Images
+files = dir(fullfile(directory, '*.png'));
+
+% Define Parameters
 desired_colors = {
-   [255, 242, 204], % Cladding
-   [112, 173, 71], % Green Stain
-   [255, 0,0], % Red Stain
-   [0, 176, 240] % Cracks
+    [255, 242, 204], % Cladding
+    [112, 173, 71],  % Superficial Dirt
+    [255, 0, 0],     % Raising Damp
+    [0, 176, 240]    % Cracks
 };
-
-% Tolerance to consider a color
 color_tolerance = 45;
-% Tolerance to consider distance between centroids
-distance_tolerance = 10;
+distance_tolerance = 5;
 
-% Initialize variables to store the area of class 1 in the first image
+% Initialize Variables
 area_class1_first_img = 0;
-
-% Initialize a structure to store statistics for each class
 class_stats = struct('Class2', [], 'Class3', [], 'Class4', []);
-
-% Initialize a structure to store centroids and labels for each class in each image
 centroids_labels = struct('Class2', [], 'Class3', [], 'Class4', []);
+results = struct();
+kn = struct('Class2', [], 'Class3', [], 'Class4', []);
+kan = struct('Class2', [], 'Class3', [], 'Class4', []);
+kmax = 4;
 
-% Loop over each image
+% Variables to accumulate areas per image
+area_accum = struct('Class2', 0, 'Class3', 0, 'Class4', 0);
+
+% Image Processing
 for j = 1:length(files)
-    % Read the image
     image = imread(fullfile(directory, files(j).name));
-    
-    % Check if it's the first image
     if j == 1
-        % Loop over each class
-        for i = 1:length(desired_colors)
-            % Current color
-            desired_color = desired_colors{i};
-            
-            % Replicate the color to create a matrix of the same size as the image
-            desired_color_replicated = repmat(reshape(desired_color, 1, 1, 3), size(image, 1), size(image, 2), 1);
-            
-            % Calculate the mask for the desired color using color_tolerance
-            color_mask = all(abs(double(image) - double(desired_color_replicated)) <= color_tolerance, 3);
-            
-            % Calculate the area of class 1
-            if i == 1
-                stats = regionprops(color_mask, 'Area');
-                areas = cat(1, stats.Area);
-                area_class1_first_img = sum(areas);
-            end
-        end
+        % Process the first image to calculate the area of class 1
+        desired_color_replicated = repmat(reshape(desired_colors{1}, 1, 1, 3), size(image, 1), size(image, 2), 1);
+        color_mask = all(abs(double(image) - double(desired_color_replicated)) <= color_tolerance, 3);
+        stats = regionprops(color_mask, 'Area');
+        area_class1_first_img = sum(cat(1, stats.Area));
     else
-        % Display information for each class
+        % Reset accumulated areas for the new image
+        area_accum.Class2 = 0;
+        area_accum.Class3 = 0;
+        area_accum.Class4 = 0;
+
+        % Process subsequent images
         disp(['Image ', num2str(j)]);
-        
-        % Initialize an empty mask for the current image
         current_mask = zeros(size(image, 1), size(image, 2));
-        
-        % Loop over classes 2, 3, and 4
         for i = 2:length(desired_colors)
-            % Current color
-            desired_color = desired_colors{i};
-            
-            % Replicate the color to create a matrix of the same size as the image
-            desired_color_replicated = repmat(reshape(desired_color, 1, 1, 3), size(image, 1), size(image, 2), 1);
-            
-            % Calculate the mask for the desired color using color_tolerance
+            kn.(['Class' num2str(i)]) = input(['Enter the Kn value for class ', num2str(i), ' in image ', num2str(j), ': ']);
+            kan.(['Class' num2str(i)]) = input(['Enter the Ka,n value for class ', num2str(i), ' in image ', num2str(j), ': ']);
+            desired_color_replicated = repmat(reshape(desired_colors{i}, 1, 1, 3), size(image, 1), size(image, 2), 1);
             color_mask = all(abs(double(image) - double(desired_color_replicated)) <= color_tolerance, 3);
-            
-            % Add the current mask to the overall mask
             current_mask = current_mask | color_mask;
-            
-            % Calculate the perimeter, area, and centroid of each connected component in the binary mask
             stats = regionprops(color_mask, {'Area', 'Perimeter', 'Centroid'});
-            
-            % Store the stats in the structure
             class_stats.(['Class' num2str(i)]){j} = stats;
-            
-            % Initialize centroids_labels structure if it's the first image
-            if j == 2
+            if isempty(centroids_labels.(['Class' num2str(i)]))
                 centroids_labels.(['Class' num2str(i)]) = cell(length(files), 1);
             end
-            
-            % Initialize centroids_labels structure for each class
             centroids_labels.(['Class' num2str(i)]){j} = cell(numel(stats), 2);
+
+            % Accumulate areas for global calculation
+            area_accum.(['Class' num2str(i)]) = area_accum.(['Class' num2str(i)]) + sum(cat(1, stats.Area));
         end
         
-        % Iterate over each connected component in the mask
         for i = 2:length(desired_colors)
-            % Get centroids and labels from the previous image
             prev_centroids = centroids_labels.(['Class' num2str(i)]){j - 1};
-            
-            % Iterate over each connected component in the current mask
-            for k = 1:numel(stats)
-                % Check if it's the first image
-                if j == 2
-                    % Assign a new label
+            for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
+                if isempty(prev_centroids)
                     label = ['Anomaly ' char('A' + k - 1)];
                 else
-                    % Initialize variables to store the closest centroid and its distance
                     min_distance = Inf;
                     closest_label = '';
-                    
-                    % Iterate over previous centroids and labels
                     for l = 1:size(prev_centroids, 1)
-                        % Calculate Euclidean distance between centroids
-                        distance = sqrt(sum((stats(k).Centroid - prev_centroids{l, 1}).^2));
-                        
-                        % Check if the distance is smaller than the distance_tolerance
+                        distance = sqrt(sum((class_stats.(['Class' num2str(i)]){j}(k).Centroid - prev_centroids{l, 1}).^2));
                         if distance < distance_tolerance && distance < min_distance
-                            % Update closest label and distance
                             closest_label = prev_centroids{l, 2};
                             min_distance = distance;
                         end
                     end
-                    
-                    % Check if a matching label was found
-                    if ~isempty(closest_label)
-                        % Use the closest label
-                        label = closest_label;
+                    if isempty(closest_label)
+                        label = ['Anomaly ' char('A' + k - 1)];
                     else
-                        % Assign a new label
-                        label = ['Anomaly ' char('A' + size(prev_centroids, 1))];
+                        label = closest_label;
                     end
                 end
-                
-                % Store centroid and label
-                centroids_labels.(['Class' num2str(i)]){j}(k, :) = {stats(k).Centroid, label};
+                centroids_labels.(['Class' num2str(i)]){j}(k, :) = {class_stats.(['Class' num2str(i)]){j}(k).Centroid, label};
             end
         end
         
-        % Calculate the perimeter and centroid for each connected component in the overall mask
         stats = regionprops(current_mask, {'Perimeter', 'Centroid'});
         boundary = bwboundaries(current_mask);
         
-        % Plot the image with all Perimeters and centroids
+        % Plot masks with perimeters and centroids
         figure;
-        filled_color_mask = imfill(current_mask, 'holes'); % Fill the mask with white
+        filled_color_mask = imfill(current_mask, 'holes');
         imshow(filled_color_mask);
         hold on;
         for k = 1:length(boundary)
@@ -148,136 +125,381 @@ for j = 1:length(files)
         title(['Perimeters and Centroids in Image ', num2str(j)]);
         xlabel('X Coordinate');
         ylabel('Y Coordinate');
+        
+        % Save the current image
+        image_filename = fullfile(image_directory, ['Perimeters_Centroids_Image_', num2str(j), '.png']);
+        saveas(gcf, image_filename);
     end
-
-   % Display statistics for each class, starting from image 2
+    
+    % Display statistics for each class, from image 2
     if j > 1
         for i = 2:length(desired_colors)
             disp(['Class ', num2str(i), ' in Image ', num2str(j), ':']);
             stats = class_stats.(['Class' num2str(i)]){j};
             for k = 1:numel(stats)
-                % Calculate area as a percentage of the area of class 1 in the first image
                 area_percentage = (stats(k).Area / area_class1_first_img) * 100;
-            
                 disp(['  Anomaly ', num2str(k), ':']);
                 disp(['    Centroid X: ', num2str(stats(k).Centroid(1)), ', Y: ', num2str(stats(k).Centroid(2))]);
                 disp(['    Area (% of Class 1): ', num2str(area_percentage), '%']);
                 disp(['    Perimeter: ', num2str(stats(k).Perimeter)]);
                 disp(['    Label: ', centroids_labels.(['Class' num2str(i)]){j}{k, 2}]);
+
+                results.(['Image' num2str(j)]).(['Class' num2str(i)])(k) = struct(...
+                    'Centroid_X', stats(k).Centroid(1), ...
+                    'Centroid_Y', stats(k).Centroid(2), ...
+                    'AreaPercentage', area_percentage, ...
+                    'Perimeter', stats(k).Perimeter, ...
+                    'Label', centroids_labels.(['Class' num2str(i)]){j}{k, 2});
+            end
+        end
+        
+        % Calculate global SW for the image
+        SW_global = 0;
+        for i = 2:length(desired_colors)
+            SW_global = SW_global + (area_accum.(['Class' num2str(i)]) * kn.(['Class' num2str(i)]) * kan.(['Class' num2str(i)]));
+        end
+        SW_global = SW_global / (area_class1_first_img * kmax);
+        disp(['SW for Image ', num2str(j), ': ', num2str(SW_global)]);
+        
+        % Save global SW in the results
+        results.(['Image' num2str(j)]).SW_global = SW_global;
+
+        % Save partial results after each image
+        save(fullfile(results_directory, 'results.mat'), 'results', '-append');
+    end
+end
+
+
+% Request the user to input the analyzed years and the future year for estimation
+if strcmp(option, 'Total')
+    analyzed_years = input('Enter the analyzed years (e.g., [2020, 2021, 2022]): ');
+    future_year = input('Enter the future year for estimation: ');
+
+    % Create directory to store the masks
+    save_masks = [base_path, 'Future Year Masks\', num2str(future_year)];
+    
+    save_prediction = [base_path, 'Total\', 'Future_Results_Estimates_' num2str(future_year)];
+
+    graphs_prediction = [base_path, 'Total\', 'Future_Graphs_Estimates_' num2str(future_year)];
+
+    if ~exist(save_masks, 'dir')
+        mkdir(save_masks);
+    end
+
+    if ~exist(save_prediction, 'dir')
+        mkdir(save_prediction);
+    end
+
+    if ~exist(graphs_prediction, 'dir')
+        mkdir(graphs_prediction);
+    end
+
+    % Initialization of area and perimeter vectors for each class and "Spot"
+    max_spots_class2 = max(cellfun(@numel, class_stats.Class2));
+    max_spots_class3 = max(cellfun(@numel, class_stats.Class3));
+    max_spots_class4 = max(cellfun(@numel, class_stats.Class4));
+    areas_class2 = zeros(length(files) - 1, max_spots_class2);
+    areas_class3 = zeros(length(files) - 1, max_spots_class3);
+    areas_class4 = zeros(length(files) - 1, max_spots_class4);
+    perimeters_class2 = zeros(length(files) - 1, max_spots_class2);
+    perimeters_class3 = zeros(length(files) - 1, max_spots_class3);
+    perimeters_class4 = zeros(length(files) - 1, max_spots_class4);
+    centroids_class2_X = zeros(length(files) - 1, max_spots_class2);
+    centroids_class3_X = zeros(length(files) - 1, max_spots_class3);
+    centroids_class4_X = zeros(length(files) - 1, max_spots_class4);
+    centroids_class2_Y = zeros(length(files) - 1, max_spots_class2);
+    centroids_class3_Y = zeros(length(files) - 1, max_spots_class3);
+    centroids_class4_Y = zeros(length(files) - 1, max_spots_class4);
+
+    % Load the second mask as a reference
+    mask_reference = imread(fullfile(directory, files(2).name)); % Load the second mask as a reference
+
+    % Loop through each image
+    for j = 2:length(files)
+        % Loop through each class
+        for i = 2:length(desired_colors)
+            % Initialization of area and perimeter vectors for the current class and "Spot"
+            area_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
+            perimeter_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
+            centroid_X_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
+            centroid_Y_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
+
+            % Loop through each "Spot" in the current class
+            for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
+                % Retrieve area, perimeter, and centroid for the current "Spot" in the current class and image
+                area_percentage = class_stats.(['Class' num2str(i)]){j}(k).Area;
+                perimeter = class_stats.(['Class' num2str(i)]){j}(k).Perimeter;
+                centroid = class_stats.(['Class' num2str(i)]){j}(k).Centroid;
+
+                % Store area percentage, perimeter, and centroid in respective vectors
+                area_vector(k) = area_percentage;
+                perimeter_vector(k) = perimeter;
+                centroid_X_vector(k) = centroid(1);
+                centroid_Y_vector(k) = centroid(2);
+            end
+
+            % Update area, perimeter, and centroid vectors for the current class and image
+            switch i
+                case 2
+                    areas_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                    centroids_class2_X(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_X_vector;
+                    centroids_class2_Y(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_Y_vector;
+                case 3
+                    areas_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                    centroids_class3_X(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_X_vector;
+                    centroids_class3_Y(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_Y_vector;
+                case 4
+                    areas_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                    centroids_class4_X(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_X_vector;
+                    centroids_class4_Y(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = centroid_Y_vector;
             end
         end
     end
-end
 
-% Initialize a structure to store the areas of each "Mancha" for each class and each image
-areas_manchas = struct('Class2', [], 'Class3', [], 'Class4', []);
-
-% Loop over each image
-for j = 2:length(files)
-    % Loop over each class
+    % Future estimation and generation of the future mask for each anomaly class
     for i = 2:length(desired_colors)
-        % Initialize area vector for the current class
-        area_vector = zeros(numel(class_stats.(['Class' num2str(i)]){j}), 1);
-        
-        % Loop over each "Mancha" in the current class
-        for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
-            % Retrieve area percentage for the current "Mancha" in the current class and image
-            area_percentage = (class_stats.(['Class' num2str(i)]){j}(k).Area / area_class1_first_img) * 100;
-            
-            % Store area percentage in the area vector
-            area_vector(k) = area_percentage;
+        if i > 1  % For all classes except class 1
+            % Initialization of data for the current class (areas, perimeters, and centroids)
+            switch i
+                case 2
+                    data_areas = areas_class2;
+                    data_perimeters = perimeters_class2;
+                    data_centroids_X = centroids_class2_X;
+                    data_centroids_Y = centroids_class2_Y;
+                case 3
+                    data_areas = areas_class3;
+                    data_perimeters = perimeters_class3;
+                    data_centroids_X = centroids_class3_X;
+                    data_centroids_Y = centroids_class3_Y;
+                case 4
+                    data_areas = areas_class4;
+                    data_perimeters = perimeters_class4;
+                    data_centroids_X = centroids_class4_X;
+                    data_centroids_Y = centroids_class4_Y;
+            end
+
+            % Future estimation for areas, perimeters, and centroids of the current class
+            future_areas = zeros(1, size(data_areas, 2));
+            future_perimeters = zeros(1, size(data_perimeters, 2));
+            future_centroids_X = zeros(1, size(data_centroids_X, 2));
+            future_centroids_Y = zeros(1, size(data_centroids_Y, 2));
+            for k = 1:size(data_areas, 2)
+                % Linear fit for areas, perimeters, and centroids
+                p_area = polyfit(analyzed_years, data_areas(:, k)', 1);
+                p_perimeter = polyfit(analyzed_years, data_perimeters(:, k)', 1);
+                p_centroid_X = polyfit(analyzed_years, data_centroids_X(:, k)', 1);
+                p_centroid_Y = polyfit(analyzed_years, data_centroids_Y(:, k)', 1);
+                future_areas(k) = polyval(p_area, future_year);
+                future_perimeters(k) = polyval(p_perimeter, future_year);
+                future_centroids_X(k) = polyval(p_centroid_X, future_year);
+                future_centroids_Y(k) = polyval(p_centroid_Y, future_year);
+
+                % Display the calculated values for the future estimation
+                fprintf('Class %d, Anomaly %d: Future Area = %.2f, Future Perimeter = %.2f, Future Centroid (X, Y) = (%.2f, %.2f)\n', ...
+                        i, k, future_areas(k), future_perimeters(k), future_centroids_X(k), future_centroids_Y(k));
+            end
+
+            % Create the future mask for the current class with adjusted dimensions
+            mask_future = zeros(size(mask_reference));
+
+            % Draw white octagons at the future positions of the anomalies
+            for k = 1:length(future_areas)
+                if future_areas(k) > 0 % Only process if the future area is positive
+                    % Calculate the vertices of the octagon
+                    radius = sqrt(future_areas(k) / (2 * (1 + cos(pi/4))));
+                    theta = linspace(0, 2*pi, 9);
+                    
+                    % Limit the centroid to not escape the wall
+                    centroid_x = future_centroids_X(k);
+                    centroid_y = future_centroids_Y(k);
+                    if centroid_x < 1
+                        centroid_x = 1;
+                    elseif centroid_x > size(mask_future, 2)
+                        centroid_x = size(mask_future, 2);
+                    end
+                    if centroid_y < 1
+                       centroid_y = 1;
+                    elseif centroid_y > size(mask_future, 1)
+                        centroid_y = size(mask_future, 1);
+                    end
+
+                    % Update the vertices of the octagon with the limited centroid
+                    x = centroid_x + radius * cos(theta);
+                    y = centroid_y + radius * sin(theta);
+
+                    % Draw the octagon on the future mask
+                    mask_future = insertShape(mask_future, 'FilledPolygon', [x(:) y(:)], 'Color', 'white', 'Opacity', 1);
+                end
+            end
+
+            % Convert the future mask to binary
+            mask_future = mask_future(:,:,1) > 0;
+
+            % Save the future mask in the appropriate directory
+            class_directory = fullfile(save_masks, ['Class_', num2str(i)]);
+            if ~exist(class_directory, 'dir')
+                mkdir(class_directory);
+            end
+            mask_filename = fullfile(class_directory, ['Mask_', num2str(future_year), '_Class_', num2str(i), '.png']);
+            imwrite(mask_future, mask_filename);
+
+            % Display the future mask
+            figure;
+            imshow(mask_future);
+            title(['Estimated Mask for Class ', num2str(i), ' in the Year ', num2str(future_year)]);
+
+            % Store the future estimates in the future_estimates structure
+            future_estimates.(['Class' num2str(i)]).Areas = future_areas;
+            future_estimates.(['Class' num2str(i)]).Perimeters = future_perimeters;
+            future_estimates.(['Class' num2str(i)]).Centroids_X = future_centroids_X;
+            future_estimates.(['Class' num2str(i)]).Centroids_Y = future_centroids_Y;
         end
-        
-        % Store the area vector for the current class and image
-        areas_manchas.(['Class' num2str(i)]) = [areas_manchas.(['Class' num2str(i)]); area_vector];
     end
-end
 
-
-% Initialize area and perimeter vectors for each class and each "Mancha"
-max_manchas_class2 = max(cellfun(@numel, class_stats.Class2));
-max_manchas_class3 = max(cellfun(@numel, class_stats.Class3));
-max_manchas_class4 = max(cellfun(@numel, class_stats.Class4));
-areas_class2 = zeros(length(files) - 1, max_manchas_class2);
-areas_class3 = zeros(length(files) - 1, max_manchas_class3);
-areas_class4 = zeros(length(files) - 1, max_manchas_class4);
-perimeters_class2 = zeros(length(files) - 1, max_manchas_class2);
-perimeters_class3 = zeros(length(files) - 1, max_manchas_class3);
-perimeters_class4 = zeros(length(files) - 1, max_manchas_class4);
-
-% Loop over each image
-for j = 2:length(files)
-    % Loop over each class
-    for i = 2:length(desired_colors)
-        % Initialize area and perimeter vectors for the current class and "Mancha"
-        area_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
-        perimeter_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
-        
-        % Loop over each "Mancha" in the current class
-        for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
-            % Retrieve area and perimeter for the current "Mancha" in the current class and image
-            area_percentage = (class_stats.(['Class' num2str(i)]){j}(k).Area / area_class1_first_img) * 100;
-            perimeter = class_stats.(['Class' num2str(i)]){j}(k).Perimeter;
+    % Save future estimates in a .mat file in the specified directory
+    save(fullfile(save_prediction, sprintf('Future_Estimates_%d.mat', future_year)), 'future_estimates');
+ 
+    % Loop over each image
+    for j = 2:length(files)
+        % Loop over each class
+        for i = 2:length(desired_colors)
+            % Initialize area and perimeter vectors for the current class and "Mancha"
+            area_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
+            perimeter_vector = zeros(1, numel(class_stats.(['Class' num2str(i)]){j}));
             
-            % Store area percentage and perimeter in the respective vectors
-            area_vector(k) = area_percentage;
-            perimeter_vector(k) = perimeter;
+            % Loop over each "Mancha" in the current class
+            for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
+                % Retrieve area and perimeter for the current "Mancha" in the current class and image
+                area_percentage = (class_stats.(['Class' num2str(i)]){j}(k).Area / area_class1_first_img) * 100;
+                perimeter = class_stats.(['Class' num2str(i)]){j}(k).Perimeter;
+                
+                % Store area percentage and perimeter in respective vectors
+                area_vector(k) = area_percentage;
+                perimeter_vector(k) = perimeter;
+            end
+            
+            % Update area and perimeter vectors for the current class and image
+            switch i
+                case 2
+                    areas_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                case 3
+                    areas_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                case 4
+                    areas_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
+                    perimeters_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+            end
         end
-        
-        % Update the corresponding area and perimeter vectors for the current class and image
+    end
+    
+    % Plot graphs for each class (areas and perimeters)
+    for i = 2:length(desired_colors)
+        % Initialize data for the current class (areas)
         switch i
             case 2
-                areas_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
-                perimeters_class2(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                data_areas = areas_class2;
+                data_perimeters = perimeters_class2;
             case 3
-                areas_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
-                perimeters_class3(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                data_areas = areas_class3;
+                data_perimeters = perimeters_class3;
             case 4
-                areas_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = area_vector;
-                perimeters_class4(j-1, 1:numel(class_stats.(['Class' num2str(i)]){j})) = perimeter_vector;
+                data_areas = areas_class4;
+                data_perimeters = perimeters_class4;
         end
-    end
-end
-
-% Plot a graph for each class (áreas e perímetros)
-for i = 2:length(desired_colors)
-    % Initialize data for the current class (áreas)
-    switch i
-        case 2
-            data_areas = areas_class2;
-            data_perimeters = perimeters_class2;
-        case 3
-            data_areas = areas_class3;
-            data_perimeters = perimeters_class3;
-        case 4
-            data_areas = areas_class4;
-            data_perimeters = perimeters_class4;
+        
+        % Plot graphs for areas of the current class
+        figure;
+        for k = 1:size(data_areas, 2)
+            subplot(2, 1, 1);
+            plot(analyzed_years, data_areas(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
+            hold on;
+        end
+        hold off;
+        title(['Area for Class ', num2str(i)]);
+        xlabel('Year');
+        ylabel('Area (%)');
+        legend('Location', 'best');
+        
+        % Plot graphs for perimeters of the current class
+        for k = 1:size(data_perimeters, 2)
+            subplot(2, 1, 2);
+            plot(analyzed_years, data_perimeters(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
+            hold on;
+        end
+        hold off;
+        title(['Perimeter for Class ', num2str(i)]);
+        xlabel('Year');
+        ylabel('Perimeter');
+        legend('Location', 'best');
+    
+        % Save the current image
+        image_filename = fullfile(graph_directory, ['Class_', num2str(i),'_Graphs','.png']);
+        saveas(gcf, image_filename);
     end
     
-    % Plot graphs for áreas do current class
-    figure;
-    for k = 1:size(data_areas, 2)
+    % Future estimation
+    for i = 2:length(desired_colors)
+        % Initialize data for the current class (areas)
+        switch i
+            case 2
+                data_areas = areas_class2;
+                data_perimeters = perimeters_class2;
+            case 3
+                data_areas = areas_class3;
+                data_perimeters = perimeters_class3;
+            case 4
+                data_areas = areas_class4;
+                data_perimeters = perimeters_class4;
+        end
+        
+        % Future estimation for areas of the current class
+        future_areas = zeros(1, size(data_areas, 2));
+        future_perimeters = zeros(1, size(data_perimeters, 2));
+        for k = 1:size(data_areas, 2)
+            % Linear fit for areas
+            p_area = polyfit(analyzed_years, data_areas(:, k)', 1);
+            future_areas(k) = polyval(p_area, future_year);
+            
+            % Linear fit for perimeters
+            p_perimeter = polyfit(analyzed_years, data_perimeters(:, k)', 1);
+            future_perimeters(k) = polyval(p_perimeter, future_year);
+        end
+        
+        % Define markers for future estimates with anomaly names
+        future_markers = {'x', 's', 'd', '^', 'v', '>', '<', 'p', 'h', '*'};
+        
+        % Plot future estimation
+        figure;
         subplot(2, 1, 1);
-        plot(2:length(files), data_areas(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
-        hold on;
-    end
-    hold off;
-    title(['Area for Class ', num2str(i)]);
-    xlabel('Image number');
-    ylabel('Area (%)');
-    legend('Location', 'best');
-    
-    % Plot graphs for perímetros do current class
-    for k = 1:size(data_perimeters, 2)
+        for k = 1:size(data_areas, 2)
+            plot(analyzed_years, data_areas(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
+            hold on;
+            plot(future_year, future_areas(k), future_markers{k}, 'MarkerSize', 10, 'DisplayName', ['Future Estimate for Anomaly ' char('A' + k - 1)]);
+        end
+        hold off;
+        title(['Future Estimate of Area for Class ', num2str(i)]);
+        xlabel('Year');
+        ylabel('Area (%)');
+        legend('Location', 'best');
+        
         subplot(2, 1, 2);
-        plot(2:length(files), data_perimeters(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
-        hold on;
+        for k = 1:size(data_perimeters, 2)
+            plot(analyzed_years, data_perimeters(:, k), '-o', 'DisplayName', ['Anomaly ' char('A' + k - 1)]);
+            hold on;
+            plot(future_year, future_perimeters(k), future_markers{k}, 'MarkerSize', 10, 'DisplayName', ['Future Estimate for Anomaly ' char('A' + k - 1)]);
+        end
+        hold off;
+        title(['Future Estimate of Perimeter for Class ', num2str(i)]);
+        xlabel('Year');
+        ylabel('Perimeter');
+        legend('Location', 'best');
+        image_filename = fullfile(graphs_prediction, ['Graphs for Future Estimate for Class', num2str(i),'.png']);
+        saveas(gcf, image_filename);
     end
-    hold off;
-    title(['Perimeter for Class ', num2str(i)]);
-    xlabel('Image number');
-    ylabel('Perimeter');
-    legend('Location', 'best');
-end
+end     
 
 
