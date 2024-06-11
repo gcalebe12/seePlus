@@ -500,6 +500,6 @@ if strcmp(option, 'Total')
         image_filename = fullfile(graphs_prediction, ['Graphs for Future Estimate for Class', num2str(i),'.png']);
         saveas(gcf, image_filename);
     end
-end     
+end   
 
 
