@@ -174,11 +174,12 @@ elseif strcmp(prediction_choice, 'future')
     future_results_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Total\', ['Future_Results_Estimates_' year]);
     images_directory_1 = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Total\Images');
     images_directory_2 = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+\Total\', ['Future_Graphs_Estimates_' year]);
+    future_results_file = fullfile(future_results_directory, ['Future_Estimates_' year '.mat']);
 end
 
 % Caminho completo para o arquivo .MAT
 results_file = fullfile(results_directory, 'results.mat');
-future_results_file = fullfile(future_results_directory, ['Future_Estimates_' year '.mat']);
+
 
 % Verificar se o arquivo .MAT existe
 if isfile(results_file)
