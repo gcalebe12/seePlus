@@ -1,0 +1,274 @@
+% Mapa de abreviaturas para nomes completos das classes
+class_map = containers.Map({'SD', 'RD', 'CR'}, {'Superficial Dirt', 'Raising Damp', 'Cracks'});
+
+% Pergunta ao usuário se ele quer um ano específico ou previsão futura
+prediction_choice = input('Do you want to look for a specific year or make a prediction for the future? (Enter "specific" for a specific year or "future" for a future prediction): ', 's');
+
+% Variáveis para armazenar o ano e o caminho base do diretório
+year = '';
+base_directory = '';
+
+% Configuração do diretório base e ano com base na escolha do usuário
+if strcmp(prediction_choice, 'specific')
+    year = input('Enter the specific year: ', 's');
+    base_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Previous Year Masks\', year);
+elseif strcmp(prediction_choice, 'future')
+    year = input('Enter the year for the prediction: ', 's');
+    base_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Future Year Masks\', year);
+else
+    error('Invalid choice. Please enter "specific" or "future".');
+end
+
+% Prompt user to choose the number of masks
+num_masks = input('Enter the number of masks (e.g., 1, 2, 3, ...): ');
+
+% Initialize cell arrays to store mask files and colors
+mask_files = cell(1, num_masks);
+mask_colors = cell(1, num_masks);
+
+% Loop over each mask
+for i = 1:num_masks
+    if strcmp(prediction_choice, 'specific')
+        % Ask user for class abbreviation for a specific year
+        class_abbrev = input(['Enter the abbreviation of the class for Mask ' num2str(i) ' (e.g., "SD" for Superficial Dirt, "RD" for Raising Damp, "CR" for Cracks): '], 's');
+        % Map class abbreviation to full class name
+        class_full_name = class_map(class_abbrev);
+        % Construct mask file path for a specific year
+        mask_files{i} = fullfile(base_directory, class_full_name, [class_abbrev '-' year '.png']);
+    elseif strcmp(prediction_choice, 'future')
+        % Ask user for class number for a future prediction
+        class_number = input(['Enter the class number for Mask ' num2str(i) ' (e.g., "2" for Class_2, "3" for Class_3): '], 's');
+        % Construct mask file path for a future prediction
+        mask_files{i} = fullfile(base_directory, ['Class_' class_number], ['Mask_' year '_Class_' class_number '.png']);
+    end
+
+    % Prompt user to choose color for mask
+    mask_color_input = input(['Enter the color for Mask ' num2str(i) ' (e.g., "[255,0,0]" for red): '], 's');
+    mask_colors{i} = str2num(mask_color_input); 
+end
+
+% Load the video
+video_file = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Teste final\WhatsApp Video 2024-06-07 at 08.33.59.mp4'; % Replace with the correct path
+video_reader = VideoReader(video_file);
+
+% Read the first frame to display
+frame = readFrame(video_reader);
+video_height = size(frame, 1);
+video_width = size(frame, 2);
+num_channels = size(frame, 3);
+
+% Variable to indicate if the ROI was selected
+roi_selected = false;
+
+% Initialize the KLT tracker
+tracker = vision.PointTracker('MaxBidirectionalError', 1);
+
+% Apply colorization to all frames
+output_video_file = 'video_colorized_final.mp4'; % Output video file name
+video_writer = VideoWriter(output_video_file, 'MPEG-4'); % Create a video writing object
+open(video_writer); % Open the video writing object
+
+% Display the first frame and wait for 3 seconds to select the ROI
+imshow(frame);
+title('Select the mask area');
+pause(3);
+roi = round(getPosition(imrect)); % Returns the position of the rectangle selected by the user
+
+% Convert the area of interest to points of interest
+roi_points = [roi(1), roi(2);                 % top left
+              roi(1)+roi(3), roi(2);          % top right
+              roi(1)+roi(3), roi(2)+roi(4);   % bottom right
+              roi(1), roi(2)+roi(4)];         % bottom left
+
+% Initialize the KLT tracker with the points of interest from the selected area of interest
+initialize(tracker, roi_points, frame);
+roi_selected = true;
+
+while hasFrame(video_reader)
+    % Read the next frame
+    frame = readFrame(video_reader);
+
+    % If the ROI was selected
+    if roi_selected
+        % Track the position of the points of interest
+        [tracked_points, valid] = step(tracker, frame);
+
+        % Update the position of the area of interest based on the tracked points
+        roi(1) = min(tracked_points(:, 1)); % minimum x coordinate
+        roi(2) = min(tracked_points(:, 2)); % minimum y coordinate
+        roi(3) = max(tracked_points(:, 1)) - roi(1); % width
+        roi(4) = max(tracked_points(:, 2)) - roi(2); % height
+
+        % Loop over selected masks
+        final_frame = frame;
+        for i = 1:num_masks
+            % Read binary mask
+            mask_binary = imread(mask_files{i});
+            
+            % Resize mask to match the selected area of interest
+            resized_mask = imresize(mask_binary, [roi(4) roi(3)]);
+
+            % Determine the width and height of the resized mask
+            roi_width = size(resized_mask, 2);
+            roi_height = size(resized_mask, 1);
+
+            % Resize the selected area of interest to match the dimensions of the resized masks
+            roi = [roi(1), roi(2), roi_width, roi_height];
+                
+            % Adjust the position of the mask within the frame
+            final_mask_frame = zeros(video_height, video_width);
+            final_mask_frame(roi(2):roi(2)+roi(4)-1, roi(1):roi(1)+roi(3)-1) = resized_mask;
+            
+            % Apply the corresponding color to the mask
+            final_frame(:,:,1) = final_frame(:,:,1) + uint8(final_mask_frame) * mask_colors{i}(1); % Red component
+            final_frame(:,:,2) = final_frame(:,:,2) + uint8(final_mask_frame) * mask_colors{i}(2); % Green component
+            final_frame(:,:,3) = final_frame(:,:,3) + uint8(final_mask_frame) * mask_colors{i}(3); % Blue component
+        end
+    else
+        % If the ROI has not been selected yet, keep the original frame
+        final_frame = frame;
+    end
+
+    % Write the colorized (or original) frame to the output video file
+    writeVideo(video_writer, final_frame);
+end
+
+% Close the video writing object
+close(video_writer);
+
+% Display a message indicating that the process is complete
+disp('Colorization completed. The colorized video has been saved as "video_colorized_final.mp4".');
+
+% Additional functionality to display images and results
+
+% Display images from the specified directory
+image_dir = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test', year, 'Imagens');
+image_files = dir(fullfile(image_dir, '*.png')); % Assuming images are in .png format
+figure;
+for k = 1:length(image_files)
+    img = imread(fullfile(image_dir, image_files(k).name));
+    subplot(1, length(image_files), k);
+    imshow(img);
+    title(['Image ' num2str(k)]);
+end
+
+% Load and display results from the .mat file
+
+% Determinar o diretório base com base na escolha do usuário
+if strcmp(prediction_choice, 'specific')
+    results_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\', year, 'Written results');
+    images_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\', year, 'Images');
+elseif strcmp(prediction_choice, 'future')
+    results_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Total\Written results');
+    future_results_directory = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Total\', ['Future_Results_Estimates_' year]);
+    images_directory_1 = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Total\Images');
+    images_directory_2 = fullfile('C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\Total\', ['Future_Graphs_Estimates_' year]);
+    future_results_file = fullfile(future_results_directory, ['Future_Estimates_' year '.mat']);
+end
+
+% Caminho completo para o arquivo .MAT
+results_file = fullfile(results_directory, 'results.mat');
+
+
+% Verificar se o arquivo .MAT existe
+if isfile(results_file)
+    % Carregar os resultados do arquivo .MAT
+    loaded_data = load(results_file);
+
+    % Acessar os resultados carregados
+    results = loaded_data.results;
+
+    % Percorrer todas as imagens e classes disponíveis no arquivo
+    image_fields = fieldnames(results);
+
+    for img_idx = 1:(length(image_fields) - 1)
+        image_field = image_fields{img_idx};
+        disp(['Previous results for ', image_field, ':']);
+        resultados_da_imagem = results.(image_field);
+        
+        % Percorrer todas as classes (2, 3 e 4)
+        for class_num = 2:4
+            class_field = ['Class' num2str(class_num)];
+            
+            if isfield(resultados_da_imagem, class_field)
+                class_results = resultados_da_imagem.(class_field);
+                
+                for k = 1:numel(class_results)
+                    disp(['  Anomaly ', num2str(k), ' in ', class_field, ':']);
+                    disp(['    Centroid X: ', num2str(class_results(k).Centroid_X), ' Centroid Y: ', num2str(class_results(k).Centroid_Y)]);
+                    disp(['    Area Percentage: ', num2str(class_results(k).AreaPercentage)]);
+                    disp(['    Perimeter: ', num2str(class_results(k).Perimeter)]);
+                    disp(['    Label: ', class_results(k).Label]);
+                end
+
+            else
+                disp(['  No results for ', class_field, ' in ', image_field]);
+            end
+        end
+    end
+    SW_results = results.("SW_global");
+    disp(['SW :', num2str(SW_results)]);
+else
+    disp(['No results.mat file found in ', results_directory]);
+end
+
+if strcmp(prediction_choice, 'future')
+    % Verificar se o arquivo .MAT existe
+    if isfile(future_results_file)
+        % Carregar os resultados do arquivo .MAT
+        loaded_data = load(future_results_file);
+    
+        % Acessar os resultados carregados
+        future_results = loaded_data.future_estimates;
+
+        disp(['Estimated future results for the year' year, ':']);
+
+        % Percorrer todas as classes (2, 3 e 4)
+        for class_num = 2:4
+            class_field = ['Class' num2str(class_num)];
+            if isfield(future_results, class_field)
+               class_results = future_results.(class_field);
+               % Percorrer todas as anomalias 
+               w = 1;
+               for k = 1:numel(class_results.Areas)      
+                   disp(['Anomaly ', num2str(k), ' in Class ', num2str(class_num), ':']);
+                   disp(['  Centroid X: ', num2str(class_results(w).Centroids_X(k)), ' Centroid Y: ', num2str(class_results(w).Centroids_Y(k))]);
+                   disp(['  Area: ', num2str(class_results(w).Areas(k))]);
+                   disp(['  Perimeter: ', num2str(class_results(w).Perimeters(k))]);
+               end
+    
+            else
+               disp(['  No results for ', class_field, ' in ', image_field]);
+            end
+        end
+    else
+        disp(['No results.mat file found in ', results_directory]);
+    end
+end
+
+% Display images from the specified directory
+
+if strcmp(prediction_choice, 'specific')
+    image_files = dir(fullfile(images_directory, '*.png')); % Assuming images are in .png format
+    for k = 1:length(image_files)
+        img = imread(fullfile(images_directory, image_files(k).name));
+        figure;
+        imshow(img);
+        title(['Image ' num2str(k)]);
+    end
+elseif strcmp(prediction_choice, 'future')
+    image_files_1 = dir(fullfile(images_directory_1, '*.png')); % Assuming images are in .png format
+    image_files_2 = dir(fullfile(images_directory_2, '*.png')); % Assuming images are in .png format
+    for k = 1:length(image_files_1)
+        img = imread(fullfile(images_directory_1, image_files_1(k).name));
+        figure;
+        imshow(img);
+        title(['Image ' num2str(k)]);
+    end
+    for k = 1:length(image_files_2)
+        img = imread(fullfile(images_directory_2, image_files_2(k).name));
+        figure;
+        imshow(img);
+        title(['Future Image ' num2str(k)]);
+    end
+end
