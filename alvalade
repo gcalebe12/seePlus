@@ -1,0 +1,188 @@
+% User Input
+option = input('Enter the specific year or "Total" to see the total evolution: ', 's');
+
+% Directory Configuration
+base_path = 'C:\Users\Lenovo\Documents\IST\Pesquisa SEE+ Real Test\';
+if strcmp(option, 'Total')
+    sub_path = 'Future Year Masks\Total\Masks';
+else
+    sub_path = ['Previous Year Masks\' option '\Masks'];
+end
+masks_directory = [base_path, sub_path];
+
+% Define other directories
+image_directory = [base_path,  option '\Images'];
+results_directory = [base_path, option '\Written results'];
+graph_directory = [base_path, 'Total\Graphs'];
+
+% Create Directories if they don't exist
+dirs = {image_directory, results_directory};
+if strcmp(option, 'Total')
+    dirs{end+1} = graph_directory;
+end
+for d = dirs
+    if ~exist(d{1}, 'dir')
+        mkdir(d{1});
+    end
+end
+
+% Initialize Variables
+area_class1_first_img = 0;
+class_stats = struct('Class2', [], 'Class3', []);
+centroids_labels = struct('Class2', [], 'Class3', []);
+results = struct();
+kn = struct('Class2', [], 'Class3', []);
+kan = struct('Class2', [], 'Class3', []);
+kmax = 3;  % Adjusted for three classes
+
+% Variables to accumulate areas per image
+area_accum = struct('Class2', 0, 'Class3', 0);
+
+% Image Processing
+mask_files = {'1.png', '3.png', '2.png'};  % Ensure mask files are in the correct order
+
+for j = 1:length(mask_files)
+    % Load the mask images
+    mask_cladding = imread(fullfile(masks_directory, '1.png'));
+    mask_orange = imread(fullfile(masks_directory, '2.png'));
+    mask_blue = imread(fullfile(masks_directory, '3.png'));
+    
+    if j == 1
+        % Calculate the area of class 1 from the first mask (Cladding)
+        color_mask = mask_cladding > 0;  % Assuming the mask is binary
+        stats = regionprops(color_mask, 'Area');
+        area_class1_first_img = sum(cat(1, stats.Area));
+    else
+        % Reset accumulated areas for the new image
+        area_accum.Class2 = 0;
+        area_accum.Class3 = 0;
+
+        % Process subsequent images
+        disp(['Image ', num2str(j)]);
+        current_mask = zeros(size(mask_cladding, 1), size(mask_cladding, 2));
+        
+        % Process class 2 (Orange)
+        if j == 2
+            kn.Class2 = input(['Enter the Kn value for class 2 in image ', num2str(j), ': ']);
+            kan.Class2 = input(['Enter the Ka,n value for class 2 in image ', num2str(j), ': ']);
+            color_mask = mask_orange > 0;
+            current_mask = current_mask | color_mask;
+            stats = regionprops(color_mask, {'Area', 'Perimeter', 'Centroid'});
+            class_stats.Class2{j} = stats;
+            if isempty(centroids_labels.Class2)
+                centroids_labels.Class2 = cell(length(mask_files), 1);
+            end
+            centroids_labels.Class2{j} = cell(numel(stats), 2);
+            area_accum.Class2 = area_accum.Class2 + sum(cat(1, stats.Area));
+        end
+        
+        % Process class 3 (Blue)
+        if j == 3
+            kn.Class3 = input(['Enter the Kn value for class 3 in image ', num2str(j), ': ']);
+            kan.Class3 = input(['Enter the Ka,n value for class 3 in image ', num2str(j), ': ']);
+            color_mask = mask_blue > 0;
+            current_mask = current_mask | color_mask;
+            stats = regionprops(color_mask, {'Area', 'Perimeter', 'Centroid'});
+            class_stats.Class3{j} = stats;
+            if isempty(centroids_labels.Class3)
+                centroids_labels.Class3 = cell(length(mask_files), 1);
+            end
+            centroids_labels.Class3{j} = cell(numel(stats), 2);
+            area_accum.Class3 = area_accum.Class3 + sum(cat(1, stats.Area));
+        end
+        
+        % Process the centroids and labels
+        for i = 2:3
+            if j == i
+                prev_centroids = centroids_labels.(['Class' num2str(i)]){j - 1};
+                for k = 1:numel(class_stats.(['Class' num2str(i)]){j})
+                    if isempty(prev_centroids)
+                        label = ['Anomaly ' char('A' + k - 1)];
+                    else
+                        min_distance = Inf;
+                        closest_label = '';
+                        for l = 1:size(prev_centroids, 1)
+                            distance = sqrt(sum((class_stats.(['Class' num2str(i)]){j}(k).Centroid - prev_centroids{l, 1}).^2));
+                            if distance < distance_tolerance && distance < min_distance
+                                closest_label = prev_centroids{l, 2};
+                                min_distance = distance;
+                            end
+                        end
+                        if isempty(closest_label)
+                            label = ['Anomaly ' char('A' + k - 1)];
+                        else
+                            label = closest_label;
+                        end
+                    end
+                    centroids_labels.(['Class' num2str(i)]){j}(k, :) = {class_stats.(['Class' num2str(i)]){j}(k).Centroid, label};
+                end
+            end
+        end
+        
+        stats = regionprops(current_mask, {'Perimeter', 'Centroid'});
+        boundary = bwboundaries(current_mask);
+        
+        % Plot masks with perimeters and centroids
+        figure;
+        filled_color_mask = imfill(current_mask, 'holes');
+        imshow(filled_color_mask);
+        hold on;
+        for k = 1:length(boundary)
+            plot(boundary{k}(:,2), boundary{k}(:,1), 'r', 'LineWidth', 2);
+        end
+        for k = 1:numel(stats)
+            plot(stats(k).Centroid(1), stats(k).Centroid(2), 'b*', 'MarkerSize', 10);
+        end
+        hold off;
+        title(['Perimeters and Centroids in Image ', num2str(j)]);
+        xlabel('X Coordinate');
+        ylabel('Y Coordinate');
+        
+        % Save the current image
+        image_filename = fullfile(image_directory, ['Perimeters_Centroids_Image_', num2str(j), '.png']);
+        saveas(gcf, image_filename);
+    end
+    
+    % Display statistics for each class, from image 2
+    if j > 1
+        for i = 2:3
+            if j == i
+                disp(['Class ', num2str(i), ' in Image ', num2str(j), ':']);
+                stats = class_stats.(['Class' num2str(i)]){j};
+                for k = 1:numel(stats)
+                    area_percentage = (stats(k).Area / area_class1_first_img) * 100;
+                    disp(['  Anomaly ', num2str(k), ':']);
+                    disp(['    Centroid X: ', num2str(stats(k).Centroid(1)), ', Y: ', num2str(stats(k).Centroid(2))]);
+                    disp(['    Area (% of Class 1): ', num2str(area_percentage), '%']);
+                    disp(['    Perimeter: ', num2str(stats(k).Perimeter)]);
+                    disp(['    Label: ', centroids_labels.(['Class' num2str(i)]){j}{k, 2}]);
+
+                    results.(['Image' num2str(j)]).(['Class' num2str(i)])(k) = struct(...
+                        'Centroid_X', stats(k).Centroid(1), ...
+                        'Centroid_Y', stats(k).Centroid(2), ...
+                        'AreaPercentage', area_percentage, ...
+                        'Perimeter', stats(k).Perimeter, ...
+                        'Label', centroids_labels.(['Class' num2str(i)]){j}{k, 2});
+                end
+            end
+        end
+    end
+end
+
+% Calculate global SW for all images at the end
+SW_global = 0;
+for j = 2:3
+    if j == 2
+        SW_global = SW_global + (area_accum.Class2 * kn.Class2 * kan.Class2);
+    elseif j == 3
+        SW_global = SW_global + (area_accum.Class3 * kn.Class3 * kan.Class3);
+    end
+end
+SW_global = SW_global / (area_class1_first_img * kmax);
+disp(['SW for all images: ', num2str(SW_global)]);
+
+% Save global SW in the results
+results.SW_global = SW_global;
+
+% Save final results
+save(fullfile(results_directory, 'results.mat'), 'results');
